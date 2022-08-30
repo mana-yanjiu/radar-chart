@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      :root {
+        --main-width: 351px;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body.operating * {
+        user-select: none;
+      }
+      #contents_frame {
+        display: flex;
+        flex-direction: column;
+        margin: 20px;
+        padding: 0;
+        width: var(--main-width);
+      }
+      #title_frame {
+        margin-bottom: 10px;
+      }
+      #title {
+        height: 28px;
+        line-height: 28px;
+        text-align: center;
+        background-color: #000000;
+        color: #aaccff;
+        font-size: 12px;
+      }
+      #title .hide {
+        display: none;
+      }
+      #radar_frame {
+        position: relative;
+        margin-bottom: 10px;
+        width: var(--main-width);
+        height: var(--main-width);
+        background-color: #000000;
+      }
+      #radar {
+        position: absolute;
+      }
+      #gauze {
+        position: absolute;
+        top: 0px;
+        left: 0px;
+        width: 100%;
+        height: 100%;
+        cursor: default;
+        background-color: rgba(0, 0, 0, 0);
+        z-index: 1;
+      }
+      #form_frame {
+        margin: 0;
+        padding: 10px;
+        background-color: #000000;
+        color: #aaccff;
+        font-size: 12px;
+      }
+      #form_frame form {
+        padding: 0;
+      }
+      #input_box {
+        display: grid;
+        grid-template-columns: 40% 40% 1fr;
+        margin-bottom: 20px;
+      }
+      #input_box input,
+      #input_box button,
+      #setting_box select {
+        height: 26px;
+        margin: 0 5px 0 0;
+        box-sizing: border-box;
+      }
+      #setting_box {
+        display: grid;
+        grid-template-columns: 30% auto 1fr;
+      }
+      #switch_box {
+        display: flex;
+        align-items: center;
+        padding-right: 10px;
+      }
+      #meter_box {
+        position: relative;
+        height: 26px;
+        flex-grow: 1;
+      }
+      #meter_box::after {
+        content: "";
+        position: absolute;
+        top: 12px;
+        left: 0;
+        width: 100%;
+        border-bottom: solid 2px #88a;
+        z-index: 1;
+      }
+      #handle {
+        position: absolute;
+        width: 10px;
+        height: 26px;
+        border: solid 1px #aaaaff;
+        background-color: #ffffff;
+        box-sizing: border-box;
+        z-index: 2;
+      }
+      #meter_box.disable #handle {
+        border: solid 1px #8888aa;
+        background-color: #aaaaaa;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="contents_frame">
+      <div id="title_frame">
+        <div id="title">
+          <div id="name_display" class="hide">
+            <span id="sei"></span><span id="mei"></span>さんのパラメーター
+          </div>
+        </div>
+      </div>
+      <div id="radar_frame">
+        <canvas id="radar"></canvas>
+        <div id="gauze"></div>
+      </div>
+      <div id="form_frame">
+        <form name="execute" action="" method="get">
+          <div id="input_box">
+            <input type="text" name="sei" size="10" placeholder="姓" />
+            <input type="text" name="mei" size="10" placeholder="名" />
+            <button name="execute">診断</button>
+          </div>
+          <div id="setting_box">
+            <select name="parameter_type">
+              <option value="4">基本</option>
+              <option value="6">教科</option>
+              <option value="8" selected>性格傾向</option>
+              <option value="12">適正能力</option>
+              <option value="20">耐性能力</option>
+            </select>
+            <div id="switch_box">
+              <input type="checkbox" name="distance" id="distance_switch" checked />
+              <label for="distance_switch">ズーム</label>
+            </div>
+            <div id="meter_box">
+              <div id="handle"></div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script>
+      // 正四面体
+      const Tetrahedron = (() => {
+        const coordinates = { Z0: { X: Math.PI, Y: 0 } };
+        const surfaces = { O0: [] };
+        const TX = Math.acos(1 / 3);
+        const TY = Math.PI * 2 / 3;
+        Array(3).fill(null).forEach((_, i) => {
+          coordinates[`A${i}`] = { X: TX, Y: TY * i };
+          surfaces[`A${i}`] = [`A${i}`, `A${(i + 1) % 3}`, 'Z0'];
+          surfaces.O0.push(`A${i}`);
+        });
+
+        return { coordinates, surfaces };
+      })();
+
+      // 正六面体
+      const Hexahedron = (() => {
+        const coordinates = {};
+        const surfaces = { O0: [], Z0: [] };
+        const TX = Math.atan(Math.pow(2, 1 / 2));
+        const TY = Math.PI / 2;
+        Array(4).fill(null).forEach((_, i) => {
+          coordinates[`A${i}`] = { X: TX, Y: TY * i };
+          coordinates[`B${i}`] = { X: TX + Math.PI, Y: TY * i };
+          surfaces[`A${i}`] = [`A${i}`, `A${(i + 1) % 4}`, `B${(i + 3) % 4}`, `B${(i + 2) % 4}`];
+          surfaces.O0.push(`A${i}`);
+          surfaces.Z0.push(`B${i}`);
+        });
+
+        return { coordinates, surfaces };
+      })();
+
+      // 正八面体
+      const Octahedron = (() => {
+        const coordinates = {};
+        const surfaces = { O0: [], Z0: [] };
+        const TX = Math.acos(Math.pow(3, 1 / 2) / 3);
+        const TY = Math.PI * 2 / 3;
+        Array(3).fill(null).forEach((_, i) => {
+          coordinates[`A${i}`] = { X: TX, Y: TY * i };
+          coordinates[`B${i}`] = { X: TX + Math.PI, Y: TY * i };
+          surfaces[`A${i}`] = [`A${i}`, `A${(i + 1) % 3}`, `B${(i + 2) % 3}`];
+          surfaces[`B${i}`] = [`B${i}`, `B${(i + 1) % 3}`, `A${(i + 2) % 3}`];
+          surfaces.O0.push(`A${i}`);
+          surfaces.Z0.push(`B${i}`);
+        });
+
+        return { coordinates, surfaces };
+      })();
+
+      // 正十二面体
+      const Dodecahedron = (() => {
+        const coordinates = {};
+        const surfaces = { O0: [], Z0: [] };
+        const RL = (1 + Math.pow(5, 1 / 2)) / 2;
+        const L1 = Math.sin(Math.PI / 5);
+        const L2 = L1 * (1 + RL);
+        const L3 = Math.pow(L1 * L1 + L2 * L2, 1 / 2);
+        const TX1 = Math.asin(1 / L3);
+        const TX2 = Math.acos(L2 / L3) * 2 + TX1;
+        const TY = Math.PI * 2 / 5;
+        Array(5).fill(null).forEach((_, i) => {
+          coordinates[`A${i}`] = { X: TX1, Y: TY * i };
+          coordinates[`B${i}`] = { X: TX2, Y: TY * i };
+          coordinates[`C${i}`] = { X: TX2 + Math.PI, Y: TY * i };
+          coordinates[`D${i}`] = { X: TX1 + Math.PI, Y: TY * i };
+          surfaces[`A${i}`] = [`A${i}`, `A${(i + 1) % 5}`, `B${(i + 1) % 5}`, `C${(i + 3) % 5}`, `B${i}`];
+          surfaces[`D${i}`] = [`D${i}`, `D${(i + 1) % 5}`, `C${(i + 1) % 5}`, `B${(i + 3) % 5}`, `C${i}`];
+          surfaces.O0.push(`A${i}`);
+          surfaces.Z0.push(`D${i}`);
+        });
+
+        return { coordinates, surfaces };
+      })();
+
+      // 正二十面体
+      const Icosahedron = (() => {
+        const coordinates = {};
+        const surfaces = { O0: [], Z0: [] };
+        const RL = (1 + Math.pow(5, 1 / 2)) / 2;
+        const L1 = Math.pow(3, 1 / 2) / 2;
+        const L2 = L1 * RL;
+        const L3 = Math.pow(L1 * L1 + L2 * L2, 1 / 2);
+        const TX1 = Math.asin(1 / L3);
+        const TX2 = Math.acos(L2 / L3) * 2 + TX1;
+        const TY = Math.PI * 2 / 3;
+        Array(3).fill(null).forEach((_, i) => {
+          coordinates[`A${i}`] = { X: TX1, Y: TY * i };
+          coordinates[`B${i}`] = { X: TX2, Y: TY * i };
+          coordinates[`C${i}`] = { X: TX2 + Math.PI, Y: TY * i };
+          coordinates[`D${i}`] = { X: TX1 + Math.PI, Y: TY * i };
+          surfaces[`A${i}`] = [`A${i}`, `A${(i + 1) % 3}`, `C${(i + 2) % 3}`];
+          surfaces[`B${i}`] = [`A${i}`, `B${i}`, `C${(i + 1) % 3}`];
+          surfaces[`B${i + 3}`] = [`A${i}`, `B${i}`, `C${(i + 2) % 3}`];
+          surfaces[`C${i}`] = [`D${i}`, `C${i}`, `B${(i + 1) % 3}`];
+          surfaces[`C${i + 3}`] = [`D${i}`, `C${i}`, `B${(i + 2) % 3}`];
+          surfaces[`D${i}`] = [`D${i}`, `D${(i + 1) % 3}`, `B${(i + 2) % 3}`];
+          surfaces.O0.push(`A${i}`);
+          surfaces.Z0.push(`D${i}`);
+        });
+
+        return { coordinates, surfaces };
+      })();
+
+      const parameterTypeValues = {
+        4: {
+          polygon: Tetrahedron,
+          parameterTexts: ['恋愛運', '健康運', '仕事運', '勝負運'],
+          basisFillStyle: 'rgba(0, 0, 0, 0.0)',
+          basisStrokeStyle: 'rgba(0, 112, 64, 0.5)',
+          shaftFillStyle: 'rgba(0, 0, 0, 0.0)',
+          shaftStrokeStyle: 'rgba(0, 112, 96, 0.4)',
+          meterFillStyle: 'rgba(0, 216, 96, 0.04)',
+          meterStrokeStyle: 'rgba(0, 160, 0, 0.15)',
+          paramFillStyle: 'rgba(112, 160, 64, 0.4)',
+          paramStrokeStyle: 'rgba(112, 160, 64, 0.8)',
+          textFillStyle: 'rgba(96, 156, 176, 0.3)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        6: {
+          polygon: Hexahedron,
+          parameterTexts: ['国語', '数学', '理科', '社会', '体育', '音楽', '美術', '外語'],
+          basisFillStyle: 'rgba(0, 0, 0, 0.0)',
+          basisStrokeStyle: 'rgba(255, 128, 80, 0.5)',
+          shaftFillStyle: 'rgba(0, 0, 0, 0.0)',
+          shaftStrokeStyle: 'rgba(255, 160, 128, 0.3)',
+          meterFillStyle: 'rgba(255, 128, 56, 0.05)',
+          meterStrokeStyle: 'rgba(255, 128, 56, 0.15)',
+          paramFillStyle: 'rgba(255, 64, 0, 0.4)',
+          paramStrokeStyle: 'rgba(255, 64, 0, 0.8)',
+          textFillStyle: 'rgba(255, 80, 40, 0.3)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        8: {
+          polygon: Octahedron,
+          parameterTexts: ['行動力', '適応力', '独創性', '感受性', '自然愛', 'オーラ'],
+          basisFillStyle: 'rgba(0, 0, 0, 0.0)',
+          basisStrokeStyle: 'rgba(96, 184, 240, 0.5)',
+          shaftFillStyle: 'rgba(255, 255, 255, 0.0)',
+          shaftStrokeStyle: 'rgba(96, 184, 240, 0.4)',
+          meterFillStyle: 'rgba(0, 80, 192, 0.05)',
+          meterStrokeStyle: 'rgba(0, 80, 192, 0.15)',
+          paramFillStyle: 'rgba(112, 240, 192, 0.4)',
+          paramStrokeStyle: 'rgba(112, 240, 192, 0.8)',
+          textFillStyle: 'rgba(240, 0, 64, 0.3)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        12: {
+          polygon: Dodecahedron,
+          parameterTexts: ['体力', '攻撃', '防御', '知力', '魔力', '指揮', '話術', '操縦', '変装', '料理', '品位', '理力', '感性', '人徳', '技術', '包容', '直感', '視力', '霊感', '芸術'],
+          basisFillStyle: 'rgba(0, 0, 0, 0.0)',
+          basisStrokeStyle: 'rgba(192, 0, 128, 0.5)',
+          shaftFillStyle: 'rgba(0, 0, 0, 0.0)',
+          shaftStrokeStyle: 'rgba(184, 0, 32, 0.4)',
+          meterFillStyle: 'rgba(80, 0, 40, 0.15)',
+          meterStrokeStyle: 'rgba(80, 0, 40, 0.4)',
+          paramFillStyle: 'rgba(128, 20, 172, 0.4)',
+          paramStrokeStyle: 'rgba(128, 20, 172, 0.8)',
+          textFillStyle: 'rgba(0, 96, 112, 0.3)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        20: {
+          polygon: Icosahedron,
+          parameterTexts: ['耐暑', '耐寒', '耐魔', '耐獣', '耐風', '耐水', '耐火', '耐Ｇ', '耐菌', '耐毒', '耐光', '耐闇'],
+          basisFillStyle: 'rgba(0, 0, 0, 0.0)',
+          basisStrokeStyle: 'rgba(0, 0, 255, 0.5)',
+          shaftFillStyle: 'rgba(0, 0, 0, 0.0)',
+          shaftStrokeStyle: 'rgba(0, 0, 160, 0.4)',
+          meterFillStyle: 'rgba(0, 0, 160, 0.1)',
+          meterStrokeStyle: 'rgba(0, 0, 160, 0.2)',
+          paramFillStyle: 'rgba(80, 80, 255, 0.4)',
+          paramStrokeStyle: 'rgba(80, 80, 255, 0.8)',
+          textFillStyle: 'rgba(0, 0, 160, 0.6)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+      };
+
+      const displaySize = 351;
+      const displayCenter = displaySize / 2 + 0.5;
+      const polygonRadius = 125;
+      const veocorOperationRadius = 170;
+      const minViewTheta = (5 / 180) * Math.PI;
+      const maxViewTheta = (20 / 180) * Math.PI;
+      const frameElem = document.getElementById('radar_frame');
+      const canvasElem = document.getElementById('radar');
+      const canvasContext = canvasElem.getContext('2d');
+      const gauzeElem = document.getElementById('gauze');
+      const titleElem = document.getElementById('title');
+      const nameDisplayElem = document.getElementById('name_display');
+      const seiElem = document.getElementById('sei');
+      const meiElem = document.getElementById('mei');
+      const inputSeiElem = document.execute.sei;
+      const inputMeiElem = document.execute.mei;
+      const checkElem = document.execute.distance;
+      const selectElem = document.execute.parameter_type;
+      const submitElem = document.execute.execute;;
+      const meterBoxElem = document.getElementById('meter_box');
+      const meterHandleElem = document.getElementById('handle');
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+      const rect = frameElem.getBoundingClientRect();
+      const meterBoxStyle = window.getComputedStyle(meterBoxElem, '');
+      const meterBoxWidth = parseInt(meterBoxStyle.width.replace('px', ''));
+      const meterHandleStyle = window.getComputedStyle(meterHandleElem, '');
+      const meterHandlePadding = parseInt(meterHandleStyle.width.replace('px', '')) / 2;
+      const surfaceGroup = { basis: {}, shaft: {}, meter: {}, param: {} };
+      const reqestSeiMatch = location.search.match(/[?&]sei=([^&]+)/);
+      const reqestMeiMatch = location.search.match(/[?&]mei=([^&]+)/);
+
+      let parameterType = 8;
+      let moveType = 'vector';
+      let moveSwitch = false;
+      let animationSwitch = true;
+      let latestBaseX = 0;
+      let latestBaseY = 0;
+      let latestMoveX = 0;
+      let latestMoveY = 0;
+      let moveRotateTheta = 0;
+      let moveVectorTheta = -0.6;
+      let moveLengthTheta = 0;
+      let diffRotateTheta = 0;
+      let diffLengthTheta = 0.05;
+      let baseRotateTheta = 0.2;
+      let baseVectorTheta = 0;
+      let baseLengthTheta = 0;
+      let rotateTheta = 0;
+      let vectorTheta = 0;
+      let lengthTheta = 0;
+      let viewTheta = minViewTheta;
+      let sei = decodeURIComponent(reqestSeiMatch?.[1] || '');
+      let mei = decodeURIComponent(reqestMeiMatch?.[1] || '');
+      let parameters = [];
+      let parametersProgress = [];
+      let progressCount = (sei || mei) ? 0 : 100;
+      let momentPoses = {};
+      let momentSurfaces = [];
+      let radarCoordinates = {};
+      let parameterTextParams = {};
+      let distanceSwitch = true;
+      let meterChangeSwitch = false;
+      let meterPosition = 0;
+      let mousePosition = 0;
+
+      canvasElem.setAttribute('width', `${displaySize}px`);
+      canvasElem.setAttribute('height', `${displaySize}px`);
+      canvasContext.font = '12px';
+      inputSeiElem.value = sei;
+      inputMeiElem.value = mei;
+
+      // 三平方の定理による辺の長の返却
+      const getLengthByPytha = (hypotenuse, cathetus1, cathetus2) => {
+        switch (null) {
+          case cathetus1:
+            return Math.pow((Math.pow(hypotenuse, 2) - Math.pow(cathetus2, 2)), (1 / 2));
+          case cathetus2:
+            return Math.pow((Math.pow(hypotenuse, 2) - Math.pow(cathetus1, 2)), (1 / 2));
+          default:
+            return Math.pow((Math.pow(cathetus1, 2) + Math.pow(cathetus2, 2)), (1 / 2));
+        }
+      };
+
+      // 三平方の定理による辺の比率の補完
+      const finalizeRatioByPytha = (ratio) => {
+        switch (null) {
+            case ratio.B:
+              return { ...raiio, B: Math.pow((Math.pow(ratio.A, 2) - Math.pow(ratio.C, 2)), (1 / 2)) };
+            case ratio.C:
+              return { ...ratio, C: Math.pow((Math.pow(ratio.A, 2) - Math.pow(ratio.B, 2)), (1 / 2)) };
+            default:
+              return { ...ratio, A: Math.pow((Math.pow(ratio.B, 2) + Math.pow(ratio.C, 2)), (1 / 2)) };
+        }
+      };
+
+      //
+      const getThetaByLengthes = (thetaCode, X, Y) => {
+        const TA_LG = Math.PI / 2;
+        const TR_ZR = Math.PI;
+        const TR_LG = Math.PI / -2;
+
+        const T = X === 0 ? 0 : Math.atan(Math.abs(Y) / Math.abs(X));
+
+        switch (thetaCode) {
+          case 'X':
+            switch (true) {
+              case X > 0 && Y > 0: return TR_LG + T;
+              case X > 0 && Y <= 0: return TR_LG - T;
+              case X < 0 && Y > 0: return TA_LG - T;
+              case X < 0 && Y <= 0: return TA_LG + T;
+              case X === 0 && Y > 0: return 0;
+              case X === 0 && Y <= 0: return TR_ZR;
+            }
+          case 'Y':
+            switch (true) {
+              case X > 0 && Y > 0: return TR_LG - T;
+              case X > 0 && Y <= 0: return TR_LG + T;
+              case X < 0 && Y > 0: return TA_LG + T;
+              case X < 0 && Y <= 0: return TA_LG - T;
+              case X === 0 && Y > 0: return TR_ZR;
+              case X === 0 && Y <= 0: return 0;
+            }
+          case 'Z':
+            switch (true) {
+              case X > 0 && Y > 0: return T * -1;
+              case X > 0 && Y <= 0: return T;
+              case X < 0 && Y > 0: return TR_ZR + T;
+              case X < 0 && Y <= 0: return TR_ZR - T;
+              case X === 0 && Y > 0: return TR_LG;
+              case X === 0 && Y <= 0: return TA_LG;
+            }
+        }
+      };
+
+      //
+      const getLengthesByTheta = (thetaCode, theta) => {
+        theta = theta % (Math.PI * 2);
+        theta = theta > Math.PI ? (theta - Math.PI * 2) : theta;
+        theta = theta < Math.PI * -1 ? (theta + Math.PI * 2) : theta;
+
+        const T_ABS = Math.abs(theta);
+        const S_ABS = Math.abs(Math.sin(theta));
+        const C_ABS = Math.abs(Math.cos(theta));
+        const TA_LG = Math.PI / 2;
+
+        switch (thetaCode) {
+          case 'X':
+            return { X: S_ABS * (theta < 0 ? 1 : -1), Y: C_ABS * (T_ABS < TA_LG ? 1 : -1) };
+          case 'Y':
+            return { X: S_ABS * (theta < 0 ? 1 : -1), Y: C_ABS * (T_ABS > TA_LG ? 1 : -1) };
+          default:
+            return { X: C_ABS * (T_ABS < TA_LG ? 1 : -1), Y: S_ABS * (theta < 0 ? 1 : -1) };
+        }
+      };
+
+      // 特定位置からの相対移動による絶対位置の返却
+      const getThetasByRelative = () => {
+        const TA0 = moveVectorTheta - (Math.PI / 2);
+        const TY0 = baseVectorTheta - TA0;
+        const LS0 = getLengthesByTheta('Z', baseLengthTheta);
+        const RY0 = LS0.Y;
+        const LZ0 = LS0.X;
+        const LS1 = getLengthesByTheta('Y', TY0);
+        const LX1 = LS1.X * RY0;
+        const LY1 = LS1.Y * RY0;
+        const RX1 = getLengthByPytha(null, LX1, LZ0);
+        const TX1 = getThetaByLengthes('X', LX1, LZ0);
+        const TX2 = TX1 + moveLengthTheta;
+        const LS2 = getLengthesByTheta('X', TX2);
+        const LX2 = LS2.X * RX1;
+        const LZ2 = LS2.Y * RX1;
+        const RY2 = getLengthByPytha(null, LX2, LY1);
+        const TL2 = getThetaByLengthes('Z', LZ2, RY2);
+        const TV2 = getThetaByLengthes('Y', LX2, LY1);
+        
+        const thetas = {
+          rotateTheta: baseRotateTheta,
+          vectorTheta: TV2 + TA0,
+          lengthTheta: TL2,
+        };
+
+        if (LY1 == 0) {
+          return thetas;
+        }
+
+        const LS3 = getLengthesByTheta('X', TX1);
+        const LX3 = LS3.X * RX1;
+        const LZ3 = LS3.Y * RX1;
+        const RY3 = getLengthByPytha(null, LX3, LY1);
+        const TL3 = getThetaByLengthes('Z', LZ3, RY3);
+        const TV3 = getThetaByLengthes('Y', LX3, LY1);
+        const L0 = Math.sin(TV3);
+        const L1 = Math.cos(TV3);
+        const L2 = Math.cos(TL3) * L1;
+        const T0 = getThetaByLengthes('Y', L2, L0);
+        const T1 = T0 + TV3;
+        const L3 = Math.sin(TV2);
+        const L4 = Math.cos(TV2);
+        const L5 = Math.cos(TL2) * L4;
+        const T2 = getThetaByLengthes('Y', L5, L3);
+        const T3 = T2 + TV2;
+        const TX = T3 - T1;
+
+        return { ...thetas, rotateTheta: TX + baseRotateTheta };
+      };
+
+
+      const move = () => {
+        baseRotateTheta = rotateTheta;
+        baseVectorTheta = vectorTheta;
+        baseLengthTheta = lengthTheta;
+
+        if (moveType === 'vector') {
+          const diffX = latestMoveX - latestBaseX;
+          const diffY = latestMoveY - latestBaseY;
+          const directionX = (diffX > 0) ? -1 : 1;
+          const directionY = (diffY > 0) ? 1 : -1;
+          const absX = Math.min(Math.abs(diffX), 30);
+          const absY = Math.min(Math.abs(diffY), 30);
+          const thetaDiffX = (absX / 200) * directionX;
+          const thetaDiffY = (absY / 200) * directionY;
+
+          moveRotateTheta = 0;
+          moveVectorTheta = getThetaByLengthes('Y', thetaDiffX, thetaDiffY) * -1 + Math.PI;
+          moveLengthTheta = 0;
+          diffLengthTheta = getLengthByPytha(null, thetaDiffX, thetaDiffY);
+          diffRotateTheta = 0;
+        } else {
+          const LD0X = latestBaseX - displayCenter;
+          const LD0Y = latestBaseY - displayCenter;
+          const LD1X = latestMoveX - displayCenter;
+          const LD1Y = latestMoveY - displayCenter;
+          const TD0 = getThetaByLengthes('Y', LD0X, LD0Y);
+          const TD1 = getThetaByLengthes('Y', LD1X, LD1Y);
+          const TD2 = TD1 - TD0;
+
+          const directionT = (TD2 > 0) ? 1 : -1;
+          const absT = Math.min(Math.abs(TD2), 0.2);
+
+          moveRotateTheta = 0;
+          moveLengthTheta = 0;
+          diffLengthTheta = 0;
+          diffRotateTheta = absT * directionT;
+        }
+
+        latestBaseX = latestMoveX;
+        latestBaseY = latestMoveY;
+      };
+
+      const slide = () => {
+        if (diffLengthTheta > 0) {
+          moveLengthTheta += diffLengthTheta;
+
+          const thetas = getThetasByRelative();
+
+          rotateTheta = thetas.rotateTheta;
+          vectorTheta = thetas.vectorTheta;
+          lengthTheta = thetas.lengthTheta;
+        } else if (diffRotateTheta != 0) {
+          moveRotateTheta += diffRotateTheta;
+          rotateTheta = baseRotateTheta + moveRotateTheta;
+          vectorTheta = baseVectorTheta + moveRotateTheta;
+        }
+      };
+
+      const resetAxis = (x, y) => {
+        latestMoveX = x;
+        latestMoveY = y;
+        latestBaseX = x;
+        latestBaseY = y;
+
+        const relativeDiffX = latestBaseX - displayCenter;
+        const relativeDiffY = latestBaseY - displayCenter;
+        const relativeDiffR = getLengthByPytha(null, relativeDiffX, relativeDiffY);
+
+        moveType = relativeDiffR <= veocorOperationRadius ? 'vector' : 'rotate';
+      };
+
+      const changeAxis = (x, y) => {
+        latestMoveX = x;
+        latestMoveY = y;
+      };
+
+      const setAxis = (x, y) => {
+        latestMoveX = x;
+        latestMoveY = y;
+      };
+
+      const progress = () => {
+        if (progressCount < 100) {
+          parametersProgress.forEach((parameter, i) => {
+            parametersProgress[i] = Math.min(parameter + 2, parameters[i]);
+          });
+
+          progressCount ++;
+        }
+      };
+
+      // 初期化
+      const summons = () => {
+        const { polygon: { coordinates, surfaces }, parameterTexts } = parameterTypeValues[parameterType];
+
+        parametersProgress = Array(parameterTexts.length).fill(0);
+        radarCoordinates = { O: { R: 0, X: 0, Y: 0 } };
+        parameterTextParams = {};
+        surfaceGroup.basis = {};
+        surfaceGroup.shaft = {};
+        surfaceGroup.meter = {};
+        surfaceGroup.param = {};
+
+        Object.keys(coordinates).forEach((code) => {
+          Array(3).fill(null).forEach((_, i) => {
+            radarCoordinates[`${code}_${i}`] = { ...coordinates[code], R: polygonRadius / 4 * (i + 1) };
+          });
+
+          radarCoordinates[code] = { ...coordinates[code], R: polygonRadius };
+          surfaceGroup.shaft[code] = ['O', code];
+        });
+
+        Object.keys(surfaces).forEach((surfaceCode) => {
+          Array(3).fill(null).forEach((_, i) => {
+            surfaceGroup.meter[`${surfaceCode}_${i}`] = surfaces[surfaceCode].map((code) => `${code}_${i}`);
+          });
+
+          surfaceGroup.basis[surfaceCode] = [ ...surfaces[surfaceCode] ];
+          surfaceGroup.param[surfaceCode] = surfaces[surfaceCode].map((code) => `${code}_param`);
+        });
+      };
+
+      // パラメーター情報の初期化
+      const configureParam = () => {
+        const { polygon: { coordinates }, parameterTexts } = parameterTypeValues[parameterType];
+
+        Object.keys(coordinates).forEach((code, i) => {
+          const parameterLength = (parametersProgress[i] / 100) * polygonRadius;
+          const textValue = `${parameterTexts[i]}: ${parametersProgress[i]}`;
+          const textParam = canvasContext.measureText(textValue);
+
+          radarCoordinates[`${code}_param`] = { ...coordinates[code], R: parameterLength };
+          parameterTextParams[code] = {
+            textValue: textValue,
+            textWidth: textParam.width,
+          };
+        });
+      };
+
+      // 方向転換
+      const setDirection = () => {
+        momentSurfaces = [];
+
+        const focalLength = distanceSwitch && 1 / Math.sin(viewTheta);
+        const axisTheta = (vectorTheta - Math.PI / 2);
+
+        Object.keys(surfaceGroup).forEach((partType) => {
+          Object.keys(surfaceGroup[partType]).forEach((surfaceCode) => {
+            const surface = surfaceGroup[partType][surfaceCode];
+
+            let zIndex = 0;
+
+            surface.forEach((posCode) => {
+              const pos = radarCoordinates[posCode];
+
+              let X = 0;
+              let Y = 0;
+              let Z = 0;
+
+              if (posCode !== 'O') {
+                const LS0 = getLengthesByTheta('Z', pos.X);
+                const RY0 = LS0.Y;
+                const LZ0 = LS0.X;
+                const TY1 = pos.Y + rotateTheta - axisTheta;
+                const LS1 = getLengthesByTheta('Y', TY1);
+                const LX1 = LS1.X * RY0;
+                const LY1 = LS1.Y * RY0;
+                const TX1 = getThetaByLengthes('X', LX1, LZ0);
+                const RX1 = getLengthByPytha(null, LX1, LZ0);
+                const TX2 = TX1 + lengthTheta;
+                const LS2 = getLengthesByTheta('X', TX2);
+                const LX2 = LS2.X * RX1;
+                const LZ2 = LS2.Y * RX1;
+                const TY2 = getThetaByLengthes('Y', LX2, LY1);
+                const RY2 = getLengthByPytha(null, LX2, LY1) / (distanceSwitch ? (focalLength - LZ2) * Math.tan(viewTheta) : 1);
+                const TY3 = TY2 + axisTheta;
+                const LS3 = getLengthesByTheta('Y', TY3);
+                const LX3 = LS3.X * RY2;
+                const LY3 = LS3.Y * RY2;
+
+                X = LX3 * pos.R;
+                Y = LY3 * pos.R;
+                Z = LZ2 * pos.R;
+              }
+
+              momentPoses[`${partType}_${posCode}`] = { X, Y, Z };
+
+              zIndex += Z;
+            });
+
+            momentSurfaces.push({
+              partType: partType,
+              code: surfaceCode,
+              zIndex: zIndex / surface.length,
+            });
+          });
+        });
+
+        Object.keys(parameterTextParams).forEach((code) => {
+          const zIndex = momentPoses[`basis_${code}`].Z;
+          momentSurfaces.push({ partType: 'text', code, zIndex });
+        });
+
+        momentSurfaces.sort((A, B) => A.zIndex - B.zIndex);
+      };
+
+      // 描画
+      const output = () => {
+        canvasContext.setTransform(1, 0, 0, 1, 0, 0);
+        canvasContext.clearRect(0, 0, displaySize, displaySize);
+
+        const {
+          basisFillStyle,
+          basisStrokeStyle,
+          shaftFillStyle,
+          shaftStrokeStyle,
+          meterFillStyle,
+          meterStrokeStyle,
+          paramFillStyle,
+          paramStrokeStyle,
+          textFillStyle,
+          textStrokeStyle,
+        } = parameterTypeValues[parameterType];
+
+        momentSurfaces.forEach((momentSurface) => {
+          if (momentSurface.partType === 'text') {
+            const parameterTextParam = parameterTextParams[momentSurface.code];
+            const parameterCoordinate = momentPoses[`basis_${momentSurface.code}`];
+            const posX = parseFloat(parameterCoordinate.X + displayCenter + 5);
+            const posY = parseFloat(parameterCoordinate.Y + displayCenter - 5);
+
+            canvasContext.fillStyle = textFillStyle;
+            canvasContext.fillRect(posX - 5, posY - 10, parameterTextParam.textWidth + 10, 12);
+            canvasContext.fillStyle = textStrokeStyle;
+            canvasContext.fillText(parameterTextParam.textValue, posX, posY);
+
+            return;
+          }
+
+          const targetSurface = surfaceGroup[momentSurface.partType][momentSurface.code];
+
+          canvasContext.beginPath();
+          targetSurface.forEach((posCode, j) => {
+            const { X, Y } = momentPoses[`${momentSurface.partType}_${posCode}`];
+            if (j === 0) {
+              canvasContext.moveTo(displayCenter + X, displayCenter + Y);
+            } else {
+              canvasContext.lineTo(displayCenter + X, displayCenter + Y);
+            }
+          });
+          canvasContext.closePath();
+          switch (momentSurface.partType) {
+            case 'basis':
+              canvasContext.fillStyle = basisFillStyle;
+              canvasContext.strokeStyle = basisStrokeStyle;
+              break;
+
+            case 'shaft':
+              canvasContext.fillStyle = shaftFillStyle;
+              canvasContext.strokeStyle = shaftStrokeStyle;
+              break;
+
+            case 'meter':
+              canvasContext.fillStyle = meterFillStyle;
+              canvasContext.strokeStyle = meterStrokeStyle;
+              break;
+
+            case 'param':
+              canvasContext.fillStyle = paramFillStyle;
+              canvasContext.strokeStyle = paramStrokeStyle;
+              break;
+          }
+          canvasContext.fill();
+          canvasContext.stroke();
+        });
+      };
+
+      const execute = () => {
+        if (moveSwitch) {
+          move();
+        }
+        slide();
+        configureParam();
+        setDirection();
+        output();
+        progress();
+
+        if (animationSwitch) {
+          setTimeout(execute, 50);
+        }
+      };
+
+      const makeParameters = () => {
+        const { parameterTexts } = parameterTypeValues[parameterType];
+        parameters = parameterTexts.map(() => 0);
+
+        if (sei || mei) {
+          const nameValue = `${sei}_${mei}`;
+          let seedW = nameValue.split('').reduce((n, s, i) => n + Math.pow((s.charCodeAt() + 617) % (29 + i), 2), 0) + parameterType;
+          let seedX = 758106988;
+          let seedY = 904319737;
+          let seedZ = 346211936;
+          parameterTexts.forEach((paramText, i) => {
+            const R = seedX ^ (seedX << 11);
+            seedX = seedY;
+            seedY = seedZ;
+            seedZ = seedW;
+            seedW = (seedW ^ (seedW >>> 19)) ^ (R ^ (R >>> 8));
+            parameters[i] = (Math.abs(seedW) % 100) + 1;
+          });
+        }
+      };
+
+      const setName = () => {
+        seiElem.innerText = sei;
+        meiElem.innerText = mei;
+        nameDisplayElem.classList.remove('hide');
+      };
+
+      gauzeElem.addEventListener('mousedown', (event) => {
+        moveSwitch = true;
+        resetAxis(event.clientX, event.clientY);
+        document.body.classList.add('operating');
+      });
+
+      gauzeElem.addEventListener('mousemove', (event) => {
+        if (moveSwitch) {
+          changeAxis(event.clientX, event.clientY);
+        }
+      });
+
+      gauzeElem.addEventListener('keydown', () => {
+        animationSwitch = !animationSwitch;
+        if (animationSwitch) {
+          setTimeout(() => execute, 50);
+        }
+      });
+
+      selectElem.addEventListener('change', () => {
+        const selectedOption = selectElem.options[selectElem.selectedIndex];
+        parameterType = parseInt(selectedOption.value);
+        if (sei || mei) {
+          makeParameters();
+        }
+        progressCount = 0;
+        summons();
+      });
+
+      submitElem.addEventListener('click', () => {
+        const _sei = String(inputSeiElem.value);
+        const _mei = String(inputMeiElem.value);
+        if (sei !== _sei || mei !== _mei) {
+          sei = _sei;
+          mei = _mei;
+          const url = location.href.replace(/\?.*/, '');
+          const paramSei = encodeURIComponent(sei);
+          const paramMei = encodeURIComponent(mei);
+          history.replaceState(null, '', `${url}?sei=${paramSei}&mei=${paramMei}`);
+          makeParameters();
+          progressCount = 0;
+          setName();
+          summons();
+        }
+        event.stopPropagation();
+        event.preventDefault();
+      });
+
+      checkElem.addEventListener('change', (event) => {
+        distanceSwitch = event.target.checked;
+        if (distanceSwitch) {
+          meterBoxElem.classList.remove('disable');
+        } else {
+          meterBoxElem.classList.add('disable');
+        }
+      });
+
+      meterBoxElem.addEventListener('mousedown', (event) => {
+        if (!distanceSwitch) {
+          return;
+        }
+        const elementRect = meterBoxElem.getBoundingClientRect();
+        const minPosition = elementRect.x + meterHandlePadding;
+        const maxPosition = elementRect.x + meterBoxWidth - meterHandlePadding;
+        mousePosition = event.clientX;
+        meterPositionCandidate = Math.min(Math.max(minPosition, mousePosition), maxPosition);
+        if (Math.abs(meterPosition - meterPositionCandidate) > meterHandlePadding) {
+          meterPosition = meterPositionCandidate;
+          const percentage = (meterPosition - minPosition) / (maxPosition - minPosition);
+          viewTheta = (maxViewTheta - minViewTheta) * percentage + minViewTheta;
+          meterHandleElem.style.left = `${meterPosition - minPosition}px`;
+        }
+        meterChangeSwitch = true;
+        document.body.classList.add('operating');
+      });
+
+      document.addEventListener('mousemove', (event) => {
+        if (!distanceSwitch || !meterChangeSwitch) {
+          return;
+        }
+
+        const elementRect = meterBoxElem.getBoundingClientRect();
+        const minPosition = elementRect.x + meterHandlePadding;
+        const maxPosition = elementRect.x + meterBoxWidth - meterHandlePadding;
+        const mousePositionOrigin = Math.min(Math.max(minPosition, event.clientX), maxPosition);
+        const diffPosition = mousePositionOrigin - mousePosition;
+        mousePosition = mousePositionOrigin;
+        meterPosition = Math.min(Math.max(minPosition, meterPosition + diffPosition), maxPosition);
+        const percentage = (meterPosition - minPosition) / (maxPosition - minPosition);
+        viewTheta = (maxViewTheta - minViewTheta) * percentage + minViewTheta;
+        meterHandleElem.style.left = `${meterPosition - minPosition}px`;
+      });
+
+      document.addEventListener('mouseup', (event) => {
+        meterChangeSwitch = false;
+        document.body.classList.remove('operating');
+        if (moveSwitch) {
+          moveSwitch = false;
+          setAxis(event.clientX, event.clientY);
+        }
+      });
+
+      if (sei || mei) {
+        setName();
+      }
+      makeParameters();
+      summons();
+      execute();
+    </script>
+  </body>
+</html>
