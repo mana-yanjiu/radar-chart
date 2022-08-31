@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta charset="utf-8" />
     <style>
       :root {
         --main-width: 351px;
@@ -69,7 +70,6 @@
         margin-bottom: 20px;
       }
       #input_box input,
-      #input_box button,
       #setting_box select {
         height: 26px;
         margin: 0 5px 0 0;
@@ -78,6 +78,23 @@
       #setting_box {
         display: grid;
         grid-template-columns: 30% auto 1fr;
+      }
+      #execute_button {
+        height: 26px;
+        line-height: 26px;
+        box-sizing: border-box;
+        border: solid 1px #aaaaaa;
+        border-radius: 2px;
+        background-color: #ffffff;
+        color: #000;
+        text-align: center;
+        cursor: pointer;
+      }
+      #execute_button:hover {
+        background-color: #ddeeff;
+      }
+      #execute_button:active {
+        background-color: #ccddee;
       }
       #switch_box {
         display: flex;
@@ -111,6 +128,16 @@
         border: solid 1px #8888aa;
         background-color: #aaaaaa;
       }
+      #note {
+        text-decoration: none;
+        list-style: none;
+        margin: -4px 0;
+        padding: 0 0 0 20px;
+      }
+      #note li {
+        line-height: 20px;
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
@@ -131,7 +158,7 @@
           <div id="input_box">
             <input type="text" name="sei" size="10" placeholder="姓" />
             <input type="text" name="mei" size="10" placeholder="名" />
-            <button name="execute">診断</button>
+            <div id="execute_button">診断</div>
           </div>
           <div id="setting_box">
             <select name="parameter_type">
@@ -152,6 +179,10 @@
         </form>
       </div>
     </div>
+    <ul id="note">
+      <li>※このプログラムは指定された個人に対して意味のある方法でのパラメーター算出を行ってはおりませんので、算出結果は信用しないでください。</li>
+      <li>※仮に不当な算出結果がでても落ち込まないでください。</li>
+    </ul>
     <script>
       // 正四面体
       const Tetrahedron = (() => {
@@ -288,7 +319,7 @@
         },
         8: {
           polygon: Octahedron,
-          parameterTexts: ['行動力', '適応力', '独創性', '感受性', '自然愛', 'オーラ'],
+          parameterTexts: ['行動力', '適応力', '持久力', '独創性', '感受性', 'オーラ'],
           basisFillStyle: 'rgba(0, 0, 0, 0.0)',
           basisStrokeStyle: 'rgba(96, 184, 240, 0.5)',
           shaftFillStyle: 'rgba(255, 255, 255, 0.0)',
@@ -302,7 +333,7 @@
         },
         12: {
           polygon: Dodecahedron,
-          parameterTexts: ['体力', '攻撃', '防御', '知力', '魔力', '指揮', '話術', '操縦', '変装', '料理', '品位', '理力', '感性', '人徳', '技術', '包容', '直感', '視力', '霊感', '芸術'],
+          parameterTexts: ['体力', '攻撃', '防御', '知力', '魔力', '視力', '理力', '指揮', '技術', '芸術', '忍術', '話術', '操縦', '変装', '料理', '理性', '感性', '人徳', '直感', '霊感'],
           basisFillStyle: 'rgba(0, 0, 0, 0.0)',
           basisStrokeStyle: 'rgba(192, 0, 128, 0.5)',
           shaftFillStyle: 'rgba(0, 0, 0, 0.0)',
@@ -348,7 +379,7 @@
       const inputMeiElem = document.execute.mei;
       const checkElem = document.execute.distance;
       const selectElem = document.execute.parameter_type;
-      const submitElem = document.execute.execute;;
+      const submitElem = document.getElementById('execute_button');
       const meterBoxElem = document.getElementById('meter_box');
       const meterHandleElem = document.getElementById('handle');
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -426,7 +457,7 @@
         }
       };
 
-      //
+      // 座標からの角度の返却
       const getThetaByLengthes = (thetaCode, X, Y) => {
         const TA_LG = Math.PI / 2;
         const TR_ZR = Math.PI;
@@ -442,7 +473,7 @@
               case X < 0 && Y > 0: return TA_LG - T;
               case X < 0 && Y <= 0: return TA_LG + T;
               case X === 0 && Y > 0: return 0;
-              case X === 0 && Y <= 0: return TR_ZR;
+              default: return TR_ZR;
             }
           case 'Y':
             switch (true) {
@@ -451,21 +482,21 @@
               case X < 0 && Y > 0: return TA_LG + T;
               case X < 0 && Y <= 0: return TA_LG - T;
               case X === 0 && Y > 0: return TR_ZR;
-              case X === 0 && Y <= 0: return 0;
+              default: return 0;
             }
-          case 'Z':
+          default:
             switch (true) {
               case X > 0 && Y > 0: return T * -1;
               case X > 0 && Y <= 0: return T;
               case X < 0 && Y > 0: return TR_ZR + T;
               case X < 0 && Y <= 0: return TR_ZR - T;
               case X === 0 && Y > 0: return TR_LG;
-              case X === 0 && Y <= 0: return TA_LG;
+              default: return TA_LG;
             }
         }
       };
 
-      //
+      // 角度からの座標の返却
       const getLengthesByTheta = (thetaCode, theta) => {
         theta = theta % (Math.PI * 2);
         theta = theta > Math.PI ? (theta - Math.PI * 2) : theta;
@@ -486,8 +517,8 @@
         }
       };
 
-      // 特定位置からの相対移動による絶対位置の返却
-      const getThetasByRelative = () => {
+      // 特定位置からの相対移動による絶対位置の算出
+      const calculateMovedThetas = () => {
         const TA0 = moveVectorTheta - (Math.PI / 2);
         const TY0 = baseVectorTheta - TA0;
         const LS0 = getLengthesByTheta('Z', baseLengthTheta);
@@ -506,14 +537,12 @@
         const TL2 = getThetaByLengthes('Z', LZ2, RY2);
         const TV2 = getThetaByLengthes('Y', LX2, LY1);
         
-        const thetas = {
-          rotateTheta: baseRotateTheta,
-          vectorTheta: TV2 + TA0,
-          lengthTheta: TL2,
-        };
+        rotateTheta = baseRotateTheta;
+        vectorTheta = TV2 + TA0;
+        lengthTheta = TL2;
 
-        if (LY1 == 0) {
-          return thetas;
+        if (LY1 === 0) {
+          return;
         }
 
         const LS3 = getLengthesByTheta('X', TX1);
@@ -534,7 +563,7 @@
         const T3 = T2 + TV2;
         const TX = T3 - T1;
 
-        return { ...thetas, rotateTheta: TX + baseRotateTheta };
+        rotateTheta += TX;
       };
 
 
@@ -583,13 +612,8 @@
       const slide = () => {
         if (diffLengthTheta > 0) {
           moveLengthTheta += diffLengthTheta;
-
-          const thetas = getThetasByRelative();
-
-          rotateTheta = thetas.rotateTheta;
-          vectorTheta = thetas.vectorTheta;
-          lengthTheta = thetas.lengthTheta;
-        } else if (diffRotateTheta != 0) {
+          calculateMovedThetas();
+        } else if (diffRotateTheta !== 0) {
           moveRotateTheta += diffRotateTheta;
           rotateTheta = baseRotateTheta + moveRotateTheta;
           vectorTheta = baseVectorTheta + moveRotateTheta;
@@ -607,11 +631,6 @@
         const relativeDiffR = getLengthByPytha(null, relativeDiffX, relativeDiffY);
 
         moveType = relativeDiffR <= veocorOperationRadius ? 'vector' : 'rotate';
-      };
-
-      const changeAxis = (x, y) => {
-        latestMoveX = x;
-        latestMoveY = y;
       };
 
       const setAxis = (x, y) => {
@@ -865,7 +884,7 @@
 
       gauzeElem.addEventListener('mousemove', (event) => {
         if (moveSwitch) {
-          changeAxis(event.clientX, event.clientY);
+          setAxis(event.clientX, event.clientY);
         }
       });
 
@@ -901,8 +920,6 @@
           setName();
           summons();
         }
-        event.stopPropagation();
-        event.preventDefault();
       });
 
       checkElem.addEventListener('change', (event) => {
