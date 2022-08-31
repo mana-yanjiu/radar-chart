@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --main-width: 401px;
+        --main-height: 351px;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body.operating * {
+        user-select: none;
+      }
+      #contents_frame {
+        display: flex;
+        flex-direction: column;
+        margin: 20px;
+        padding: 0;
+        width: var(--main-width);
+      }
+      #title_frame {
+        margin-bottom: 10px;
+      }
+      #title {
+        height: 28px;
+        line-height: 28px;
+        text-align: center;
+        background-color: #000000;
+        color: #aaccff;
+        font-size: 12px;
+      }
+      #title .hide {
+        display: none;
+      }
+      #radar_frame {
+        position: relative;
+        margin-bottom: 10px;
+        width: var(--main-width);
+        height: var(--main-height);
+        background-color: #000000;
+      }
+      #radar,
+      #param {
+        position: absolute;
+      }
+      #gauze {
+        position: absolute;
+        top: 0px;
+        left: 0px;
+        width: 100%;
+        height: 100%;
+        cursor: default;
+        background-color: rgba(0, 0, 0, 0);
+        z-index: 1;
+      }
+      #form_frame {
+        margin: 0;
+        padding: 10px;
+        background-color: #000000;
+        color: #aaccff;
+        font-size: 12px;
+      }
+      #form_frame form {
+        padding: 0;
+      }
+      #input_box {
+        display: grid;
+        grid-template-columns: 40% 40% 1fr;
+        margin-bottom: 20px;
+      }
+      #input_box input,
+      #setting_box select {
+        height: 26px;
+        margin: 0 5px 0 0;
+        box-sizing: border-box;
+      }
+      #setting_box {
+        display: grid;
+        grid-template-columns: 30% auto 1fr;
+      }
+      #execute_button {
+        height: 26px;
+        line-height: 26px;
+        box-sizing: border-box;
+        border: solid 1px #aaaaaa;
+        border-radius: 2px;
+        background-color: #ffffff;
+        color: #000;
+        text-align: center;
+        cursor: pointer;
+      }
+      #execute_button:hover {
+        background-color: #ddeeff;
+      }
+      #execute_button:active {
+        background-color: #ccddee;
+      }
+      #note {
+        text-decoration: none;
+        list-style: none;
+        margin: -4px 0;
+        padding: 0 0 0 20px;
+      }
+      #note li {
+        line-height: 20px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="contents_frame">
+      <div id="title_frame">
+        <div id="title">
+          <div id="name_display" class="hide">
+            <span id="sei"></span><span id="mei"></span>さんのパラメーター
+          </div>
+        </div>
+      </div>
+      <div id="radar_frame">
+        <canvas id="radar"></canvas>
+        <canvas id="param"></canvas>
+      </div>
+      <div id="form_frame">
+        <form name="execute" action="" method="get">
+          <div id="input_box">
+            <input type="text" name="sei" size="10" placeholder="姓" />
+            <input type="text" name="mei" size="10" placeholder="名" />
+            <div id="execute_button">診断</div>
+          </div>
+          <div id="setting_box">
+            <select name="parameter_type">
+              <option value="4">基本</option>
+              <option value="6">教科</option>
+              <option value="8" selected>性格傾向</option>
+              <option value="12">適正能力</option>
+              <option value="20">耐性能力</option>
+            </select>
+          </div>
+        </form>
+      </div>
+    </div>
+    <ul id="note">
+      <li>※このプログラムは指定された個人に対して意味のある方法でのパラメーター算出を行ってはおりませんので、算出結果は信用しないでください。</li>
+      <li>※仮に不当な算出結果がでても落ち込まないでください。</li>
+    </ul>
+    <script>
+      const parameterTypeValues = {
+        4: {
+          parameterTexts: ['恋愛運', '健康運', '仕事運', '勝負運'],
+          basisStrokeStyle: 'rgba(0, 192, 96, 0.5)',
+          shaftStrokeStyle: 'rgba(0, 192, 96, 1)',
+          meterStrokeStyle: 'rgba(0, 192, 96, 0.2)',
+          meterHalfStrokeStyle: 'rgba(0, 192, 96, 0.5)',
+          paramFillStyle: 'rgba(112, 160, 64, 0.4)',
+          paramStrokeStyle: 'rgba(112, 160, 64, 0.8)',
+          textFillStyle: 'rgba(112, 160, 64, 0.2)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        6: {
+          parameterTexts: ['国語', '数学', '理科', '社会', '体育', '音楽', '美術', '外語'],
+          basisStrokeStyle: 'rgba(255, 128, 56, 0.5)',
+          shaftStrokeStyle: 'rgba(255, 128, 56, 1)',
+          meterStrokeStyle: 'rgba(255, 128, 56, 0.2)',
+          meterHalfStrokeStyle: 'rgba(255, 128, 56, 0.5)',
+          paramFillStyle: 'rgba(255, 96, 0, 0.4)',
+          paramStrokeStyle: 'rgba(255, 96, 0, 0.8)',
+          textFillStyle: 'rgba(255, 96, 0, 0.2)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        8: {
+          parameterTexts: ['行動力', '適応力', '持久力', '独創性', '感受性', 'オーラ'],
+          basisStrokeStyle: 'rgba(96, 184, 240, 0.5)',
+          shaftStrokeStyle: 'rgba(96, 184, 240, 1)',
+          meterStrokeStyle: 'rgba(96, 184, 240, 0.2)',
+          meterHalfStrokeStyle: 'rgba(96, 184, 240, 0.5)',
+          paramFillStyle: 'rgba(112, 240, 192, 0.4)',
+          paramStrokeStyle: 'rgba(112, 240, 192, 0.8)',
+          textFillStyle: 'rgba(112, 240, 192, 0.2)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        12: {
+          parameterTexts: ['体力', '攻撃', '防御', '知力', '魔力', '視力', '理力', '指揮', '技術', '芸術', '忍術', '話術', '操縦', '変装', '料理', '理性', '感性', '人徳', '直感', '霊感'],
+          basisStrokeStyle: 'rgba(255, 0, 160, 0.5)',
+          shaftStrokeStyle: 'rgba(255, 0, 160, 1)',
+          meterStrokeStyle: 'rgba(255, 0, 160, 0.2)',
+          meterHalfStrokeStyle: 'rgba(255, 0, 160, 0.5)',
+          paramFillStyle: 'rgba(128, 20, 172, 0.4)',
+          paramStrokeStyle: 'rgba(128, 20, 172, 0.8)',
+          textFillStyle: 'rgba(128, 20, 172, 0.2)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+        20: {
+          parameterTexts: ['耐暑', '耐寒', '耐魔', '耐獣', '耐風', '耐水', '耐火', '耐Ｇ', '耐菌', '耐毒', '耐光', '耐闇'],
+          basisStrokeStyle: 'rgba(64, 64, 255, 0.5)',
+          shaftStrokeStyle: 'rgba(64, 64, 255, 1)',
+          meterStrokeStyle: 'rgba(64, 64, 255, 0.2)',
+          meterHalfStrokeStyle: 'rgba(64, 64, 255, 0.5)',
+          paramFillStyle: 'rgba(128, 100, 255, 0.4)',
+          paramStrokeStyle: 'rgba(128, 100, 255, 0.8)',
+          textFillStyle: 'rgba(128, 100, 255, 0.2)',
+          textStrokeStyle: 'rgba(255, 255, 255, 0.8)',
+        },
+      };
+
+      const displaySizeX = 401;
+      const displaySizeY = 351;
+      const displayCenterX = displaySizeX / 2 + 0.5;
+      const displayCenterY = displaySizeY / 2 + 0.5;
+      const polygonRadius = 125;
+      const frameElem = document.getElementById('radar_frame');
+      const radarCanvasElem = document.getElementById('radar');
+      const radarCanvasContext = radarCanvasElem.getContext('2d');
+      const paramCanvasElem = document.getElementById('param');
+      const paramCanvasContext = paramCanvasElem.getContext('2d');
+      const titleElem = document.getElementById('title');
+      const nameDisplayElem = document.getElementById('name_display');
+      const seiElem = document.getElementById('sei');
+      const meiElem = document.getElementById('mei');
+      const inputSeiElem = document.execute.sei;
+      const inputMeiElem = document.execute.mei;
+      const selectElem = document.execute.parameter_type;
+      const submitElem = document.getElementById('execute_button');
+      const reqestSeiMatch = location.search.match(/[?&]sei=([^&]+)/);
+      const reqestMeiMatch = location.search.match(/[?&]mei=([^&]+)/);
+
+      let parameterType = 8;
+      let sei = decodeURIComponent(reqestSeiMatch?.[1] || '');
+      let mei = decodeURIComponent(reqestMeiMatch?.[1] || '');
+      let parameters = [];
+      let parametersProgress = [];
+      let progressCount = (sei || mei) ? 0 : 100;
+      let parameterTextParams = [];
+
+      radarCanvasElem.setAttribute('width', `${displaySizeX}px`);
+      radarCanvasElem.setAttribute('height', `${displaySizeY}px`);
+      paramCanvasElem.setAttribute('width', `${displaySizeX}px`);
+      paramCanvasElem.setAttribute('height', `${displaySizeY}px`);
+      paramCanvasContext.font = '12px';
+      inputSeiElem.value = sei;
+      inputMeiElem.value = mei;
+
+      // 初期化
+      const summons = () => {
+        const { parameterTexts, basisStrokeStyle, shaftStrokeStyle, meterStrokeStyle, meterHalfStrokeStyle } = parameterTypeValues[parameterType];
+
+        parametersProgress = Array(parameterTexts.length).fill(0);
+        parameterTextParams = [];
+        progressCount = 0;
+
+        radarCanvasContext.clearRect(0, 0, displaySizeX, displaySizeY);
+        radarCanvasContext.strokeStyle = shaftStrokeStyle;
+        parameterTexts.forEach((_, i) => {
+          const T = Math.PI * 2 / parameterTexts.length * i;
+          const X = Math.sin(T) * polygonRadius;
+          const Y = Math.cos(T) * polygonRadius;
+          radarCanvasContext.beginPath();
+          radarCanvasContext.moveTo(displayCenterX, displayCenterY);
+          radarCanvasContext.lineTo(displayCenterX + X, displayCenterY - Y);
+          radarCanvasContext.stroke();
+          Array(4).fill(null).forEach((_, j) => {
+            const MX1 = Math.sin(T) * polygonRadius / 4 * (j + 1);
+            const MY1 = Math.cos(T) * polygonRadius / 4 * (j + 1);
+            const MX2 = MX1 + Math.cos(T) * (j % 2 ? 8 : 6);
+            const MY2 = MY1 - Math.sin(T) * (j % 2 ? 8 : 6);
+            radarCanvasContext.beginPath();
+            radarCanvasContext.moveTo(displayCenterX + MX1, displayCenterY - MY1);
+            radarCanvasContext.lineTo(displayCenterX + MX2, displayCenterY - MY2);
+            radarCanvasContext.stroke();
+          });
+        });
+        Array(4).fill(null).forEach((_, i) => {
+          radarCanvasContext.strokeStyle =
+            i === 3 ? basisStrokeStyle :
+            i === 1 ? meterHalfStrokeStyle :
+            meterStrokeStyle;
+          radarCanvasContext.beginPath();
+          parameterTexts.forEach((_, j) => {
+            const T = Math.PI * 2 / parameterTexts.length * j;
+            const X = Math.sin(T) * polygonRadius / 4 * (i + 1);
+            const Y = Math.cos(T) * polygonRadius / 4 * (i + 1);
+            j === 0
+              ? radarCanvasContext.moveTo(displayCenterX + X, displayCenterY - Y)
+              : radarCanvasContext.lineTo(displayCenterX + X, displayCenterY - Y);
+          });
+          radarCanvasContext.closePath();
+          radarCanvasContext.stroke();
+        });
+      };
+
+      // パラメーター情報の初期化
+      const configureParam = () => {
+        const { parameterTexts } = parameterTypeValues[parameterType];
+        parametersProgress.forEach((parameter, i) => {
+          const textValue = `${parameterTexts[i]}: ${parameter}`;
+          const textParam = paramCanvasContext.measureText(textValue);
+          parameterTextParams[i] = { textValue, textParam };
+        });
+      };
+
+      // 描画
+      const output = () => {
+        paramCanvasContext.setTransform(1, 0, 0, 1, 0, 0);
+        paramCanvasContext.clearRect(0, 0, displaySizeX, displaySizeY);
+
+        const {
+          basisFillStyle,
+          basisStrokeStyle,
+          shaftFillStyle,
+          shaftStrokeStyle,
+          meterStrokeStyle,
+          paramFillStyle,
+          paramStrokeStyle,
+          textFillStyle,
+          textStrokeStyle,
+        } = parameterTypeValues[parameterType];
+
+        parametersProgress.forEach((param, i) => {
+          const { textValue, textParam } = parameterTextParams[i];
+          const { width: textWidth, actualBoundingBoxAscent, actualBoundingBoxDescent } = textParam;
+          const BT = Math.PI * 2 / parametersProgress.length * i;
+          const BX = Math.sin(BT) * (polygonRadius + 8);
+          const BY = Math.cos(BT) * (polygonRadius + 8);
+          const TX = parseFloat(displayCenterX + BX) + (
+            (i % (parametersProgress.length / 2) === 0) ? textWidth / -2 :
+            (i > parametersProgress.length / 2) ? textWidth * -1 : 0
+          );
+          const TY = parseFloat(displayCenterY - BY) - ((actualBoundingBoxAscent + actualBoundingBoxDescent) / 2 - actualBoundingBoxAscent);
+          const CX = TX - 5;
+          const CW = textWidth + 10;
+          const CY = TY - actualBoundingBoxAscent - 1;
+          const CH = actualBoundingBoxAscent + actualBoundingBoxDescent + 2;
+          paramCanvasContext.fillStyle = textFillStyle;
+          paramCanvasContext.fillRect(CX, CY, CW, CH);
+          paramCanvasContext.fillStyle = textStrokeStyle;
+          paramCanvasContext.fillText(textValue, TX, TY);
+        });
+        paramCanvasContext.fillStyle = paramFillStyle;
+        paramCanvasContext.strokeStyle = paramStrokeStyle;
+        paramCanvasContext.beginPath();
+        parametersProgress.forEach((param, i) => {
+          const T = Math.PI * 2 / parametersProgress.length * i;
+          const X = Math.sin(T) * polygonRadius * param / 100;
+          const Y = Math.cos(T) * polygonRadius * param / 100;
+          i === 0
+            ? paramCanvasContext.moveTo(displayCenterX + X, displayCenterY - Y)
+            : paramCanvasContext.lineTo(displayCenterX + X, displayCenterY - Y);
+        });
+        paramCanvasContext.closePath();
+        paramCanvasContext.fill();
+        paramCanvasContext.stroke();
+      };
+
+      const execute = () => {
+        configureParam();
+        output();
+
+        if (progressCount < 100) {
+          parametersProgress.forEach((parameter, i) => {
+            parametersProgress[i] = Math.min(parameter + 2, parameters[i]);
+          });
+          progressCount ++;
+          setTimeout(execute, 50);
+        }
+      };
+
+      const makeParameters = () => {
+        const { parameterTexts } = parameterTypeValues[parameterType];
+        parameters = parameterTexts.map(() => 0);
+
+        if (sei || mei) {
+          const nameValue = `${sei}_${mei}`;
+          let seedW = nameValue.split('').reduce((n, s, i) => n + Math.pow((s.charCodeAt() + 617) % (29 + i), 2), 0) + parameterType;
+          let seedX = 758106988;
+          let seedY = 904319737;
+          let seedZ = 346211936;
+          parameterTexts.forEach((paramText, i) => {
+            const R = seedX ^ (seedX << 11);
+            seedX = seedY;
+            seedY = seedZ;
+            seedZ = seedW;
+            seedW = (seedW ^ (seedW >>> 19)) ^ (R ^ (R >>> 8));
+            parameters[i] = (Math.abs(seedW) % 100) + 1;
+          });
+        }
+      };
+
+      const setName = () => {
+        seiElem.innerText = sei;
+        meiElem.innerText = mei;
+        nameDisplayElem.classList.remove('hide');
+      };
+
+      selectElem.addEventListener('change', () => {
+        const selectedOption = selectElem.options[selectElem.selectedIndex];
+        parameterType = parseInt(selectedOption.value);
+        if (sei || mei) {
+          makeParameters();
+        }
+        progressCount = 0;
+        summons();
+        execute();
+      });
+
+      submitElem.addEventListener('click', () => {
+        const _sei = String(inputSeiElem.value);
+        const _mei = String(inputMeiElem.value);
+        if (sei !== _sei || mei !== _mei) {
+          sei = _sei;
+          mei = _mei;
+          const url = location.href.replace(/\?.*/, '');
+          const paramSei = encodeURIComponent(sei);
+          const paramMei = encodeURIComponent(mei);
+          history.replaceState(null, '', `${url}?sei=${paramSei}&mei=${paramMei}`);
+          makeParameters();
+          progressCount = 0;
+          setName();
+          summons();
+          execute();
+        }
+      });
+
+      if (sei || mei) {
+        setName();
+      }
+      makeParameters();
+      summons();
+      execute();
+    </script>
+  </body>
+</html>
